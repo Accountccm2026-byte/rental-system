@@ -528,10 +528,10 @@ with col3:
         key="calendar_month",
     )
 
-selected_year = selected_be_year - 543
-selected_month = f"{selected_year:04d}-{selected_month_number:02d}"
+    selected_year = selected_be_year - 543
+    selected_month = f"{selected_year:04d}-{selected_month_number:02d}"
 
-if selected_building != "ทุกตึก":
+    if selected_building != "ทุกตึก":
         rooms_show = rooms[rooms["building"] == selected_building].copy()
     else:
         rooms_show = rooms.copy()
