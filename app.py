@@ -757,11 +757,11 @@ with col3:
 # ==========================================================
 # 2) BOOKING
 # ==========================================================
-elif menu == "บันทึกจองห้อง":
-    st.header("บันทึกจองห้อง")
-    conn = sqlite3.connect(DB_FILE)
-    rooms = pd.read_sql("SELECT building, unit_no FROM rooms ORDER BY building, unit_no", conn)
-    conn.close()
+    elif menu == "บันทึกจองห้อง":
+        st.header("บันทึกจองห้อง")
+        conn = sqlite3.connect(DB_FILE)
+        rooms = pd.read_sql("SELECT building, unit_no FROM rooms ORDER BY building, unit_no", conn)
+        conn.close()
 
     with st.form("booking_form"):
         col1, col2 = st.columns(2)
