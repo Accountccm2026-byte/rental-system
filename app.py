@@ -492,7 +492,7 @@ if menu == "ปฏิทินห้องเช่า":
 
     col1, col2, col3 = st.columns(3)
 
-    with col1:
+with col1:
     building_options = ["ทุกตึก"] + sorted(rooms["building"].dropna().unique().tolist())
     selected_building = st.selectbox(
         "เลือกตึก",
