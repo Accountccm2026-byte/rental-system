@@ -497,17 +497,39 @@ if menu == "ปฏิทินห้องเช่า":
         selected_building = st.selectbox("เลือกตึก", building_options, key="calendar_building")
 
     with col2:
-        today = datetime.today()
-        month_options = []
-        for i in range(-2, 13):
-            d = today.replace(day=1) + pd.DateOffset(months=i)
-            month_options.append(d.strftime("%Y-%m"))
-        selected_month = st.selectbox(
-            "เลือกเดือน",
-            month_options,
-            format_func=lambda x: pd.to_datetime(x + "-01").strftime("%B %Y"),
-            key="calendar_month",
-        )
+    today = datetime.today()
+
+    # เลือกปี พ.ศ. ได้ตั้งแต่ 2560 - 2599
+    current_be_year = today.year + 543
+    year_options = list(range(2560, 2600))
+
+    selected_be_year = st.selectbox(
+        "เลือกปี",
+        year_options,
+        index=year_options.index(current_be_year),
+        key="calendar_year",
+    )
+
+    thai_months = [
+        "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน",
+        "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม",
+        "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
+    ]
+
+    month_numbers = list(range(1, 13))
+
+    selected_month_number = st.selectbox(
+        "เลือกเดือน",
+        month_numbers,
+        index=today.month - 1,
+        format_func=lambda x: thai_months[x - 1],
+        key="calendar_month",
+    )
+
+    # แปลง พ.ศ. เป็น ค.ศ. สำหรับใช้คำนวณวันที่
+    selected_year = selected_be_year - 543
+
+    selected_month = f"{selected_year:04d}-{selected_month_number:02d}"
 
     if selected_building != "ทุกตึก":
         rooms_show = rooms[rooms["building"] == selected_building].copy()
