@@ -177,7 +177,6 @@ def init_db():
         ("Palm", "2302", "1 Bedroom", "3"),
         ("Palm", "2304", "2 Bedroom", "3"),
         ("Palm", "2305", "2 Bedroom", "3"),
-        ("Palm", "2308", "2 Bedroom", "3"),
         ("Palm", "2310", "2 Bedroom", "3"),
         ("Palm", "2601/1", "2 Bedroom", "6"),
         ("Palm", "2601/2", "Studio room", "6"),
