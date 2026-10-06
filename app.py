@@ -317,41 +317,60 @@ def get_next_deposit_refund_no():
 def generate_deposit_document_html(data, doc_type):
     title = "ใบรับเงินประกัน" if doc_type == "receive" else "ใบคืนเงินประกัน"
     amount = float(data.get("amount", 0) or 0)
+
+    def slip(copy_label):
+        return f"""
+        <div class="slip">
+          <div class="copy-label">{copy_label}</div>
+          <h1>{title}</h1>
+          <div class="sub">เอกสารสำหรับรายการเงินประกันห้องพัก</div>
+          <table>
+            <tr><td>เลขที่เอกสาร</td><td>{data.get('doc_no','')}</td></tr>
+            <tr><td>วันที่</td><td>{data.get('transaction_date','')}</td></tr>
+            <tr><td>เลขที่จอง</td><td>{data.get('booking_no','')}</td></tr>
+            <tr><td>ตึก / ห้อง</td><td>{data.get('building','')} / {data.get('unit_no','')}</td></tr>
+            <tr><td>ชื่อลูกค้า</td><td>{data.get('customer_name','')}</td></tr>
+            <tr><td>รายการ</td><td>{title}</td></tr>
+            <tr><td>จำนวนเงิน</td><td class="amount">{amount:,.2f} บาท</td></tr>
+            <tr><td>หมายเหตุ</td><td>{data.get('note','') or '-'}</td></tr>
+          </table>
+          <div class="sign">
+            <div>ลงชื่อผู้จ่ายเงิน<br><br>....................................</div>
+            <div>ลงชื่อผู้รับเงิน<br><br>....................................</div>
+          </div>
+        </div>
+        """
+
     return f"""
     <!DOCTYPE html><html><head><meta charset="UTF-8"><title>{title}</title>
     <style>
-      @page {{ size:A4; margin:18mm; }}
-      body {{ font-family:Arial,sans-serif; background:#fff; color:#222; }}
-      .page {{ max-width:720px; margin:20px auto; padding:36px; border:2px solid #17365D; }}
-      h1 {{ text-align:center; color:#17365D; margin-bottom:8px; }}
-      .sub {{ text-align:center; color:#666; margin-bottom:28px; }}
-      table {{ width:100%; border-collapse:collapse; margin-top:18px; }}
-      td {{ padding:11px 8px; border-bottom:1px solid #ddd; }}
-      td:first-child {{ width:38%; font-weight:bold; }}
-      .amount {{ font-size:24px; font-weight:bold; color:#17365D; text-align:right; }}
-      .sign {{ margin-top:80px; display:flex; justify-content:space-between; text-align:center; }}
-      .print {{ text-align:center; margin:20px 0; }}
+      @page {{ size:A4 portrait; margin:0; }}
+      * {{ box-sizing:border-box; }}
+      html, body {{ margin:0; padding:0; background:#fff; color:#222; font-family:Arial,sans-serif; }}
+      .print {{ text-align:center; margin:14px 0; }}
       .print button {{ padding:9px 20px; font-size:15px; cursor:pointer; }}
-      @media print {{ .print {{ display:none; }} .page {{ border:0; margin:0; }} }}
+      .a4 {{ width:210mm; min-height:297mm; margin:0 auto; padding:8mm 10mm; }}
+      .slip {{ height:138mm; border:1.5px solid #17365D; padding:7mm 10mm; position:relative; }}
+      .slip + .slip {{ margin-top:5mm; border-top:1.5px dashed #555; }}
+      .copy-label {{ position:absolute; top:4mm; right:6mm; font-size:10px; color:#777; }}
+      h1 {{ text-align:center; color:#17365D; font-size:24px; margin:2mm 0 1mm; }}
+      .sub {{ text-align:center; color:#666; font-size:11px; margin-bottom:4mm; }}
+      table {{ width:100%; border-collapse:collapse; margin-top:2mm; font-size:11px; }}
+      td {{ padding:2.5mm 2mm; border-bottom:1px solid #ddd; }}
+      td:first-child {{ width:30%; font-weight:bold; }}
+      .amount {{ font-size:18px; font-weight:bold; color:#17365D; text-align:right; }}
+      .sign {{ margin-top:9mm; display:flex; justify-content:space-between; text-align:center; font-size:10px; }}
+      @media screen {{ .a4 {{ box-shadow:0 0 8px #ccc; }} }}
+      @media print {{
+        .print {{ display:none !important; }}
+        .a4 {{ margin:0; padding:7mm 10mm; box-shadow:none; }}
+        .slip {{ break-inside:avoid; }}
+      }}
     </style></head><body>
-      <div class="print"><button onclick="window.print()">🖨️ พิมพ์เอกสาร</button></div>
-      <div class="page">
-        <h1>{title}</h1>
-        <div class="sub">เอกสารสำหรับรายการเงินประกันห้องพัก</div>
-        <table>
-          <tr><td>เลขที่เอกสาร</td><td>{data.get('doc_no','')}</td></tr>
-          <tr><td>วันที่</td><td>{data.get('transaction_date','')}</td></tr>
-          <tr><td>เลขที่จอง</td><td>{data.get('booking_no','')}</td></tr>
-          <tr><td>ตึก / ห้อง</td><td>{data.get('building','')} / {data.get('unit_no','')}</td></tr>
-          <tr><td>ชื่อลูกค้า</td><td>{data.get('customer_name','')}</td></tr>
-          <tr><td>รายการ</td><td>{title}</td></tr>
-          <tr><td>จำนวนเงิน</td><td class="amount">{amount:,.2f} บาท</td></tr>
-          <tr><td>หมายเหตุ</td><td>{data.get('note','') or '-'}</td></tr>
-        </table>
-        <div class="sign">
-          <div>ลงชื่อผู้จ่ายเงิน<br><br>....................................</div>
-          <div>ลงชื่อผู้รับเงิน<br><br>....................................</div>
-        </div>
+      <div class="print"><button onclick="window.print()">🖨️ พิมพ์เอกสาร A4 (2 ฉบับ)</button></div>
+      <div class="a4">
+        {slip('ฉบับบริษัท')}
+        {slip('ฉบับลูกค้า')}
       </div>
     </body></html>
     """
