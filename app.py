@@ -906,7 +906,7 @@ if menu == "บันทึกจองห้อง":
             unit = st.selectbox(
                 "เลือกห้อง",
                 units,
-                key="booking_room",
+                key=f"booking_room_{bld}"
             )
             cust_name = st.text_input("ชื่อลูกค้า")
             cust_type = st.selectbox("ประเภทลูกค้า", ["Walk in", "Agent"])
