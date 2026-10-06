@@ -1623,7 +1623,15 @@ elif menu == "คืนห้อง/ออกใบเสร็จ":
 # ==========================================================
 elif menu == "พิมพ์เอกสาร":
     st.header("พิมพ์เอกสาร")
-    doc_type = st.radio("เลือกประเภท", ["ใบยืนยันการจอง", "ใบเสร็จ/คืนมัดจำ"])
+    doc_type = st.radio(
+        "เลือกประเภท",
+        [
+            "ใบยืนยันการจอง",
+            "ใบเสร็จ/คืนมัดจำ",
+            "ใบรับเงินประกัน",
+            "ใบคืนเงินประกัน",
+        ],
+    )
 
     if doc_type == "ใบยืนยันการจอง":
         search_by = st.radio("ค้นหาด้วย", ["เลขที่จอง", "รายการล่าสุด"])
@@ -1733,6 +1741,81 @@ elif menu == "พิมพ์เอกสาร":
             components.html(bk_html, height=950, scrolling=True)
             st.markdown(get_download_link(bk_html, f"ใบจอง_{bk_data['booking_no']}"), unsafe_allow_html=True)
 
+    elif doc_type in ["ใบรับเงินประกัน", "ใบคืนเงินประกัน"]:
+        tx_type = "receive" if doc_type == "ใบรับเงินประกัน" else "refund"
+        title_text = "รับเงินประกัน" if tx_type == "receive" else "คืนเงินประกัน"
+        search_by = st.radio("ค้นหาด้วย", ["เลขที่เอกสาร", "รายการล่าสุด"], key=f"deposit_print_search_{tx_type}")
+        tx_data = None
+        conn = sqlite3.connect(DB_FILE)
+
+        if search_by == "เลขที่เอกสาร":
+            inp = st.text_input("กรอกเลขที่เอกสาร", key=f"deposit_print_input_{tx_type}")
+            if inp:
+                df = pd.read_sql(
+                    """SELECT d.*, b.customer_name, b.building, b.unit_no, b.phone,
+                              b.check_in, b.check_out, b.deposit
+                       FROM deposit_transactions d
+                       LEFT JOIN bookings b ON d.booking_no = b.booking_no
+                       WHERE d.doc_no = ? AND d.transaction_type = ?""",
+                    conn,
+                    params=(inp.strip(), tx_type),
+                )
+                if not df.empty:
+                    tx_data = df.iloc[0]
+                else:
+                    st.warning("ไม่พบเลขที่เอกสาร")
+        else:
+            recent = pd.read_sql(
+                """SELECT d.doc_no, d.booking_no, d.transaction_date,
+                          b.building, b.unit_no, b.customer_name
+                   FROM deposit_transactions d
+                   LEFT JOIN bookings b ON d.booking_no = b.booking_no
+                   WHERE d.transaction_type = ?
+                   ORDER BY d.rowid DESC LIMIT 20""",
+                conn,
+                params=(tx_type,),
+            )
+            if not recent.empty:
+                labels = (
+                    recent["doc_no"].fillna("").astype(str)
+                    + " - " + recent["unit_no"].fillna("").astype(str)
+                    + " - " + recent["customer_name"].fillna("").astype(str)
+                )
+                sel = st.selectbox("เลือกรายการ", labels.tolist(), key=f"deposit_print_recent_{tx_type}")
+                doc_no = sel.split(" - ")[0]
+                df = pd.read_sql(
+                    """SELECT d.*, b.customer_name, b.building, b.unit_no, b.phone,
+                              b.check_in, b.check_out, b.deposit
+                       FROM deposit_transactions d
+                       LEFT JOIN bookings b ON d.booking_no = b.booking_no
+                       WHERE d.doc_no = ? AND d.transaction_type = ?""",
+                    conn,
+                    params=(doc_no, tx_type),
+                )
+                if not df.empty:
+                    tx_data = df.iloc[0]
+            else:
+                st.info(f"ยังไม่มีรายการ{title_text}")
+        conn.close()
+
+        if tx_data is not None:
+            st.subheader(doc_type)
+            data = {
+                "booking_no": tx_data["booking_no"],
+                "building": tx_data["building"],
+                "unit_no": tx_data["unit_no"],
+                "customer_name": tx_data["customer_name"],
+                "phone": tx_data.get("phone", ""),
+                "deposit": tx_data.get("deposit", 0),
+                "amount": tx_data["amount"],
+                "doc_no": tx_data["doc_no"],
+                "transaction_date": pd.to_datetime(tx_data["transaction_date"]).strftime("%d/%m/%Y"),
+                "note": tx_data.get("note", ""),
+            }
+            html = generate_deposit_document_html(data, tx_type)
+            components.html(html, height=800, scrolling=True)
+            st.markdown(get_download_link(html, f"{doc_type}_{data['doc_no']}"), unsafe_allow_html=True)
+
     else:
         search_by = st.radio("ค้นหาด้วย", ["เลขที่เอกสาร", "รายการล่าสุด"])
         chk_data = None
@@ -1839,7 +1922,19 @@ elif menu == "รายการจองทั้งหมด":
                   b.check_in AS "วันที่เข้า", b.check_out AS "วันที่คืน",
                   b.rent_amount AS "ค่าเช่า", b.deposit AS "มัดจำ", b.status AS "สถานะ",
                   COALESCE(c.receipt_no, '') AS "เลขที่ใบเสร็จรับเงิน",
-                  COALESCE(c.refund_no, '') AS "เลขที่ใบคืนมัดจำ"
+                  COALESCE(c.refund_no, '') AS "เลขที่ใบคืนมัดจำ",
+                  COALESCE((SELECT SUM(d.amount) FROM deposit_transactions d
+                            WHERE d.booking_no = b.booking_no AND d.transaction_type = 'receive'), 0) AS "รับเงินประกัน",
+                  COALESCE((SELECT MAX(d.transaction_date) FROM deposit_transactions d
+                            WHERE d.booking_no = b.booking_no AND d.transaction_type = 'receive'), '') AS "วันที่รับเงินประกัน",
+                  COALESCE((SELECT MAX(d.doc_no) FROM deposit_transactions d
+                            WHERE d.booking_no = b.booking_no AND d.transaction_type = 'receive'), '') AS "เลขที่รับเงินประกัน",
+                  COALESCE((SELECT SUM(d.amount) FROM deposit_transactions d
+                            WHERE d.booking_no = b.booking_no AND d.transaction_type = 'refund'), 0) AS "คืนเงินประกัน",
+                  COALESCE((SELECT MAX(d.transaction_date) FROM deposit_transactions d
+                            WHERE d.booking_no = b.booking_no AND d.transaction_type = 'refund'), '') AS "วันที่คืนเงินประกัน",
+                  COALESCE((SELECT MAX(d.doc_no) FROM deposit_transactions d
+                            WHERE d.booking_no = b.booking_no AND d.transaction_type = 'refund'), '') AS "เลขที่คืนเงินประกัน"
            FROM bookings b
            LEFT JOIN checkouts c ON c.booking_no = b.booking_no
            ORDER BY b.check_in DESC""",
