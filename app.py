@@ -574,269 +574,269 @@ if menu == "ปฏิทินห้องเช่า":
 
     col1, col2, col3 = st.columns(3)
 
-with col1:
-    building_options = ["ทุกตึก"] + sorted(rooms["building"].dropna().unique().tolist())
-    selected_building = st.selectbox(
-        "เลือกตึก",
-        building_options,
-        key="calendar_building"
-    )
-
-with col2:
-    today = datetime.today()
-
-    current_be_year = today.year + 543
-    year_options = list(range(2560, 2600))
-
-    selected_be_year = st.selectbox(
-        "เลือกปี",
-        year_options,
-        index=year_options.index(current_be_year),
-        key="calendar_year",
-    )
-
-with col3:
-    thai_months = [
-        "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน",
-        "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม",
-        "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
-    ]
-
-    selected_month_number = st.selectbox(
-        "เลือกเดือน",
-        range(1, 13),
-        index=today.month - 1,
-        format_func=lambda x: thai_months[x - 1],
-        key="calendar_month",
-    )
-
-    selected_year = selected_be_year - 543
-    selected_month = f"{selected_year:04d}-{selected_month_number:02d}"
-
-    if selected_building != "ทุกตึก":
-        rooms_show = rooms[rooms["building"] == selected_building].copy()
-    else:
-        rooms_show = rooms.copy()
-
-    month_start = pd.to_datetime(selected_month + "-01")
-    month_end = month_start + pd.offsets.MonthEnd(1)
-    all_days = pd.date_range(month_start, month_end, freq="D")
-
-    if not bookings.empty:
-        bookings["check_in"] = pd.to_datetime(bookings["check_in"])
-        bookings["check_out"] = pd.to_datetime(bookings["check_out"])
-        if selected_building != "ทุกตึก":
-            bookings_show = bookings[bookings["building"] == selected_building].copy()
-        else:
-            bookings_show = bookings.copy()
-    else:
-        bookings_show = pd.DataFrame(
-            columns=["booking_no", "building", "unit_no", "customer_name", "check_in", "check_out", "rent_amount", "status"]
+    with col1:
+        building_options = ["ทุกตึก"] + sorted(rooms["building"].dropna().unique().tolist())
+        selected_building = st.selectbox(
+            "เลือกตึก",
+            building_options,
+            key="calendar_building"
         )
 
-    if not bookings_show.empty:
-        month_bookings = bookings_show[
-            (bookings_show["check_in"] <= month_end)
-            & (bookings_show["check_out"] >= month_start)
-        ].copy()
-    else:
-        month_bookings = bookings_show.copy()
+    with col2:
+        today = datetime.today()
 
-    total_rooms = len(rooms_show)
-    booking_count = len(month_bookings)
+        current_be_year = today.year + 543
+        year_options = list(range(2560, 2600))
 
-    today_ts = pd.Timestamp.today().normalize()
-    active_today = 0
-    if not bookings_show.empty:
-        active_today = len(
-            bookings_show[
-                (bookings_show["check_in"] <= today_ts)
-                & (bookings_show["check_out"] >= today_ts)
-                & (bookings_show["status"] != "checked_out")
-            ]
+        selected_be_year = st.selectbox(
+            "เลือกปี",
+            year_options,
+            index=year_options.index(current_be_year),
+            key="calendar_year",
         )
 
-    checked_out_count = 0 if bookings_show.empty else len(bookings_show[bookings_show["status"] == "checked_out"])
-    booked_rooms = 0 if month_bookings.empty else month_bookings["unit_no"].nunique()
-    available_rooms = max(0, total_rooms - active_today)
-
-    occupied_days = 0
-    for _, b in month_bookings.iterrows():
-        s = max(b["check_in"], month_start)
-        e = min(b["check_out"], month_end)
-        if e >= s:
-            occupied_days += (e - s).days + 1
-
-    total_room_days = total_rooms * len(all_days)
-    occupancy = occupied_days / total_room_days * 100 if total_room_days else 0
-
-    total_revenue = 0
-    if not month_bookings.empty and "rent_amount" in month_bookings.columns:
-        total_revenue = pd.to_numeric(month_bookings["rent_amount"], errors="coerce").fillna(0).sum()
-
-    summary_data = [
-        ("ห้องทั้งหมด", total_rooms),
-        ("จองแล้ว", booked_rooms),
-        ("เข้าพักอยู่", active_today),
-        ("คืนห้องแล้ว", checked_out_count),
-        ("อัตราการเข้าพัก", f"{occupancy:.0f}%"),
-        ("ห้องว่าง", available_rooms),
-        ("ยอดค่าเช่า (บาท)", f"{total_revenue:,.0f}"),
-    ]
-
-    summary_cols = st.columns(7)
-    for col, (label, value) in zip(summary_cols, summary_data):
-        with col:
-            st.markdown(
-                f'<div class="summary-box"><div class="summary-label">{label}</div><div class="summary-value">{value}</div></div>',
-                unsafe_allow_html=True,
-            )
-
-    def get_booking_color(status):
-        if status == "booked":
-            return "#9DC3E6"
-        if status == "checked_out":
-            return "#A9D18E"
-        if status in ("cancelled", "canceled"):
-            return "#E00000"
-        if status == "pending":
-            return "#FFD966"
-        return "#F4B183"
-
-    thai_days = ["จ", "อ", "พ", "พฤ", "ศ", "ส", "อา"]
-
-    html = """
-    <div class="calendar-wrapper">
-    <table class="calendar-table">
-    <thead><tr>
-    <th class="room-col">ห้อง</th>
-    <th class="type-col">ประเภท</th>
-    """
-
-    for d in all_days:
-        weekend = "weekend" if d.weekday() >= 5 else ""
-        today_class = " today" if d.date() == datetime.today().date() else ""
-        html += f'<th class="date-col {weekend}{today_class}"><div style="font-size:9px">{thai_days[d.weekday()]}</div><div style="font-size:11px">{d.day}</div></th>'
-
-    html += "</tr></thead><tbody>"
-    current_building = None
-
-    for _, room in rooms_show.iterrows():
-        building = room["building"]
-        unit = room["unit_no"]
-        room_type = room["room_type"]
-
-        if building != current_building:
-            current_building = building
-            html += f'<tr><td colspan="{2 + len(all_days)}" style="background:#17365D;color:white;text-align:left;font-weight:bold;padding:5px 10px">{building}</td></tr>'
-
-        html += f'<tr><td class="room-col">{unit}</td><td class="type-col">{room_type}</td>'
-
-        room_bookings = bookings_show[
-            (bookings_show["building"] == building)
-            & (bookings_show["unit_no"] == unit)
+    with col3:
+        thai_months = [
+            "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน",
+            "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม",
+            "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
         ]
 
-        for d in all_days:
-            weekend = d.weekday() >= 5
-            bg = "#dfe5ee" if weekend else "#ffffff"
-            cell_class = "weekend" if weekend else "empty"
-            booking_text = ""
-            booking_title = ""
-
-            found = None
-            for _, b in room_bookings.iterrows():
-                if b["check_in"] <= d <= b["check_out"]:
-                    found = b
-                    break
-
-            if found is not None:
-                bg = get_booking_color(found.get("status", "booked"))
-                cell_class = "booking"
-                booking_no = str(found.get("booking_no", ""))
-                customer = str(found.get("customer_name", ""))
-                booking_title = f"{booking_no} - {customer}"
-                if d.date() == found["check_in"].date():
-                    booking_text = booking_no[-5:] if booking_no else ""
-
-            html += f'<td class="{cell_class}" title="{booking_title}" style="background:{bg};border:1px solid #cbd5e1;height:27px">{booking_text}</td>'
-
-        html += "</tr>"
-
-    html += "</tbody></table></div>"
-    st.markdown(html, unsafe_allow_html=True)
-
-    daily_html = '<div class="calendar-wrapper" style="margin-top:0"><table class="daily-summary">'
-
-    daily_html += '<tr><td class="label">จำนวนห้องที่มีผู้เข้าพัก</td>'
-    for d in all_days:
-        count = 0
-        if not bookings_show.empty:
-            count = bookings_show[(bookings_show["check_in"] <= d) & (bookings_show["check_out"] >= d)]["unit_no"].nunique()
-        daily_html += f"<td>{count}</td>"
-    daily_html += "</tr>"
-
-    daily_html += '<tr><td class="label">ห้องว่าง</td>'
-    for d in all_days:
-        occupied = 0
-        if not bookings_show.empty:
-            occupied = bookings_show[(bookings_show["check_in"] <= d) & (bookings_show["check_out"] >= d)]["unit_no"].nunique()
-        daily_html += f"<td>{max(0, total_rooms - occupied)}</td>"
-    daily_html += "</tr>"
-
-    daily_html += '<tr><td class="label">อัตราการเข้าพัก</td>'
-    for d in all_days:
-        occupied = 0
-        if not bookings_show.empty:
-            occupied = bookings_show[(bookings_show["check_in"] <= d) & (bookings_show["check_out"] >= d)]["unit_no"].nunique()
-        rate = occupied / total_rooms * 100 if total_rooms else 0
-        daily_html += f"<td>{rate:.0f}%</td>"
-    daily_html += "</tr></table></div>"
-
-    st.markdown(daily_html, unsafe_allow_html=True)
-
-    st.markdown(
-        """
-        <div style="margin-top:10px;font-weight:bold;color:#17365D">สัญลักษณ์</div>
-        <div class="legend-box">
-            <div class="legend-item" style="background:#9DC3E6">จองแล้ว</div>
-            <div class="legend-item" style="background:#A9D18E">เข้าพัก/คืนแล้ว</div>
-            <div class="legend-item" style="background:#FFD966">รอดำเนินการ</div>
-            <div class="legend-item" style="background:#D9D9D9">ห้องว่าง</div>
-            <div class="legend-item" style="background:#E00000;color:white">ยกเลิก</div>
-            <div class="legend-item" style="background:#F4B183">อื่นๆ</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.divider()
-    st.subheader("รายการจองในเดือนนี้")
-
-    if month_bookings.empty:
-        st.info("ยังไม่มีรายการจองในเดือนที่เลือก")
-    else:
-        display = month_bookings.copy()
-        display["check_in"] = display["check_in"].dt.strftime("%d/%m/%Y")
-        display["check_out"] = display["check_out"].dt.strftime("%d/%m/%Y")
-        display = display.rename(
-            columns={
-                "booking_no": "เลขที่จอง",
-                "building": "ตึก",
-                "unit_no": "ห้อง",
-                "customer_name": "ชื่อลูกค้า",
-                "check_in": "วันที่เข้า",
-                "check_out": "วันที่คืน",
-                "rent_amount": "ค่าเช่า",
-                "status": "สถานะ",
-            }
+        selected_month_number = st.selectbox(
+            "เลือกเดือน",
+            range(1, 13),
+            index=today.month - 1,
+            format_func=lambda x: thai_months[x - 1],
+            key="calendar_month",
         )
-        cols = ["เลขที่จอง", "ตึก", "ห้อง", "ชื่อลูกค้า", "วันที่เข้า", "วันที่คืน", "ค่าเช่า", "สถานะ"]
-        cols = [c for c in cols if c in display.columns]
-        st.dataframe(display[cols], use_container_width=True, hide_index=True)
+
+        selected_year = selected_be_year - 543
+        selected_month = f"{selected_year:04d}-{selected_month_number:02d}"
+
+        if selected_building != "ทุกตึก":
+            rooms_show = rooms[rooms["building"] == selected_building].copy()
+        else:
+            rooms_show = rooms.copy()
+
+        month_start = pd.to_datetime(selected_month + "-01")
+        month_end = month_start + pd.offsets.MonthEnd(1)
+        all_days = pd.date_range(month_start, month_end, freq="D")
+
+        if not bookings.empty:
+            bookings["check_in"] = pd.to_datetime(bookings["check_in"])
+            bookings["check_out"] = pd.to_datetime(bookings["check_out"])
+            if selected_building != "ทุกตึก":
+                bookings_show = bookings[bookings["building"] == selected_building].copy()
+            else:
+                bookings_show = bookings.copy()
+        else:
+            bookings_show = pd.DataFrame(
+                columns=["booking_no", "building", "unit_no", "customer_name", "check_in", "check_out", "rent_amount", "status"]
+            )
+
+        if not bookings_show.empty:
+            month_bookings = bookings_show[
+                (bookings_show["check_in"] <= month_end)
+                & (bookings_show["check_out"] >= month_start)
+            ].copy()
+        else:
+            month_bookings = bookings_show.copy()
+
+        total_rooms = len(rooms_show)
+        booking_count = len(month_bookings)
+
+        today_ts = pd.Timestamp.today().normalize()
+        active_today = 0
+        if not bookings_show.empty:
+            active_today = len(
+                bookings_show[
+                    (bookings_show["check_in"] <= today_ts)
+                    & (bookings_show["check_out"] >= today_ts)
+                    & (bookings_show["status"] != "checked_out")
+                ]
+            )
+
+        checked_out_count = 0 if bookings_show.empty else len(bookings_show[bookings_show["status"] == "checked_out"])
+        booked_rooms = 0 if month_bookings.empty else month_bookings["unit_no"].nunique()
+        available_rooms = max(0, total_rooms - active_today)
+
+        occupied_days = 0
+        for _, b in month_bookings.iterrows():
+            s = max(b["check_in"], month_start)
+            e = min(b["check_out"], month_end)
+            if e >= s:
+                occupied_days += (e - s).days + 1
+
+        total_room_days = total_rooms * len(all_days)
+        occupancy = occupied_days / total_room_days * 100 if total_room_days else 0
+
+        total_revenue = 0
+        if not month_bookings.empty and "rent_amount" in month_bookings.columns:
+            total_revenue = pd.to_numeric(month_bookings["rent_amount"], errors="coerce").fillna(0).sum()
+
+        summary_data = [
+            ("ห้องทั้งหมด", total_rooms),
+            ("จองแล้ว", booked_rooms),
+            ("เข้าพักอยู่", active_today),
+            ("คืนห้องแล้ว", checked_out_count),
+            ("อัตราการเข้าพัก", f"{occupancy:.0f}%"),
+            ("ห้องว่าง", available_rooms),
+            ("ยอดค่าเช่า (บาท)", f"{total_revenue:,.0f}"),
+        ]
+
+        summary_cols = st.columns(7)
+        for col, (label, value) in zip(summary_cols, summary_data):
+            with col:
+                st.markdown(
+                    f'<div class="summary-box"><div class="summary-label">{label}</div><div class="summary-value">{value}</div></div>',
+                    unsafe_allow_html=True,
+                )
+
+        def get_booking_color(status):
+            if status == "booked":
+                return "#9DC3E6"
+            if status == "checked_out":
+                return "#A9D18E"
+            if status in ("cancelled", "canceled"):
+                return "#E00000"
+            if status == "pending":
+                return "#FFD966"
+            return "#F4B183"
+
+        thai_days = ["จ", "อ", "พ", "พฤ", "ศ", "ส", "อา"]
+
+        html = """
+        <div class="calendar-wrapper">
+        <table class="calendar-table">
+        <thead><tr>
+        <th class="room-col">ห้อง</th>
+        <th class="type-col">ประเภท</th>
+        """
+
+        for d in all_days:
+            weekend = "weekend" if d.weekday() >= 5 else ""
+            today_class = " today" if d.date() == datetime.today().date() else ""
+            html += f'<th class="date-col {weekend}{today_class}"><div style="font-size:9px">{thai_days[d.weekday()]}</div><div style="font-size:11px">{d.day}</div></th>'
+
+        html += "</tr></thead><tbody>"
+        current_building = None
+
+        for _, room in rooms_show.iterrows():
+            building = room["building"]
+            unit = room["unit_no"]
+            room_type = room["room_type"]
+
+            if building != current_building:
+                current_building = building
+                html += f'<tr><td colspan="{2 + len(all_days)}" style="background:#17365D;color:white;text-align:left;font-weight:bold;padding:5px 10px">{building}</td></tr>'
+
+            html += f'<tr><td class="room-col">{unit}</td><td class="type-col">{room_type}</td>'
+
+            room_bookings = bookings_show[
+                (bookings_show["building"] == building)
+                & (bookings_show["unit_no"] == unit)
+            ]
+
+            for d in all_days:
+                weekend = d.weekday() >= 5
+                bg = "#dfe5ee" if weekend else "#ffffff"
+                cell_class = "weekend" if weekend else "empty"
+                booking_text = ""
+                booking_title = ""
+
+                found = None
+                for _, b in room_bookings.iterrows():
+                    if b["check_in"] <= d <= b["check_out"]:
+                        found = b
+                        break
+
+                if found is not None:
+                    bg = get_booking_color(found.get("status", "booked"))
+                    cell_class = "booking"
+                    booking_no = str(found.get("booking_no", ""))
+                    customer = str(found.get("customer_name", ""))
+                    booking_title = f"{booking_no} - {customer}"
+                    if d.date() == found["check_in"].date():
+                        booking_text = booking_no[-5:] if booking_no else ""
+
+                html += f'<td class="{cell_class}" title="{booking_title}" style="background:{bg};border:1px solid #cbd5e1;height:27px">{booking_text}</td>'
+
+            html += "</tr>"
+
+        html += "</tbody></table></div>"
+        st.markdown(html, unsafe_allow_html=True)
+
+        daily_html = '<div class="calendar-wrapper" style="margin-top:0"><table class="daily-summary">'
+
+        daily_html += '<tr><td class="label">จำนวนห้องที่มีผู้เข้าพัก</td>'
+        for d in all_days:
+            count = 0
+            if not bookings_show.empty:
+                count = bookings_show[(bookings_show["check_in"] <= d) & (bookings_show["check_out"] >= d)]["unit_no"].nunique()
+            daily_html += f"<td>{count}</td>"
+        daily_html += "</tr>"
+
+        daily_html += '<tr><td class="label">ห้องว่าง</td>'
+        for d in all_days:
+            occupied = 0
+            if not bookings_show.empty:
+                occupied = bookings_show[(bookings_show["check_in"] <= d) & (bookings_show["check_out"] >= d)]["unit_no"].nunique()
+            daily_html += f"<td>{max(0, total_rooms - occupied)}</td>"
+        daily_html += "</tr>"
+
+        daily_html += '<tr><td class="label">อัตราการเข้าพัก</td>'
+        for d in all_days:
+            occupied = 0
+            if not bookings_show.empty:
+                occupied = bookings_show[(bookings_show["check_in"] <= d) & (bookings_show["check_out"] >= d)]["unit_no"].nunique()
+            rate = occupied / total_rooms * 100 if total_rooms else 0
+            daily_html += f"<td>{rate:.0f}%</td>"
+        daily_html += "</tr></table></div>"
+
+        st.markdown(daily_html, unsafe_allow_html=True)
+
+        st.markdown(
+            """
+            <div style="margin-top:10px;font-weight:bold;color:#17365D">สัญลักษณ์</div>
+            <div class="legend-box">
+                <div class="legend-item" style="background:#9DC3E6">จองแล้ว</div>
+                <div class="legend-item" style="background:#A9D18E">เข้าพัก/คืนแล้ว</div>
+                <div class="legend-item" style="background:#FFD966">รอดำเนินการ</div>
+                <div class="legend-item" style="background:#D9D9D9">ห้องว่าง</div>
+                <div class="legend-item" style="background:#E00000;color:white">ยกเลิก</div>
+                <div class="legend-item" style="background:#F4B183">อื่นๆ</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.divider()
+        st.subheader("รายการจองในเดือนนี้")
+
+        if month_bookings.empty:
+            st.info("ยังไม่มีรายการจองในเดือนที่เลือก")
+        else:
+            display = month_bookings.copy()
+            display["check_in"] = display["check_in"].dt.strftime("%d/%m/%Y")
+            display["check_out"] = display["check_out"].dt.strftime("%d/%m/%Y")
+            display = display.rename(
+                columns={
+                    "booking_no": "เลขที่จอง",
+                    "building": "ตึก",
+                    "unit_no": "ห้อง",
+                    "customer_name": "ชื่อลูกค้า",
+                    "check_in": "วันที่เข้า",
+                    "check_out": "วันที่คืน",
+                    "rent_amount": "ค่าเช่า",
+                    "status": "สถานะ",
+                }
+            )
+            cols = ["เลขที่จอง", "ตึก", "ห้อง", "ชื่อลูกค้า", "วันที่เข้า", "วันที่คืน", "ค่าเช่า", "สถานะ"]
+            cols = [c for c in cols if c in display.columns]
+            st.dataframe(display[cols], use_container_width=True, hide_index=True)
 
 
-# ==========================================================
+    # ==========================================================
 # 2) BOOKING
 # ==========================================================
 if menu == "บันทึกจองห้อง":
